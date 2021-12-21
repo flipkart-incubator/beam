@@ -36,6 +36,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import org.apache.beam.runners.core.construction.PTransformMatchers;
 import org.apache.beam.runners.core.construction.ReplacementOutputs;
@@ -646,6 +647,8 @@ public class KafkaIO {
 
     abstract @Nullable SerializableFunction<TopicPartition, Boolean> getCheckStopReadingFn();
 
+    abstract @Nullable Pattern getTopicRegex();
+
     abstract Builder<K, V> toBuilder();
 
     @Experimental(Kind.PORTABILITY)
@@ -692,6 +695,8 @@ public class KafkaIO {
 
       abstract Builder<K, V> setCheckStopReadingFn(
           SerializableFunction<TopicPartition, Boolean> checkStopReadingFn);
+
+      abstract Builder<K, V> setTopicRegex(Pattern topicRegex);
 
       abstract Read<K, V> build();
 
@@ -1216,6 +1221,10 @@ public class KafkaIO {
       return toBuilder().setCheckStopReadingFn(checkStopReadingFn).build();
     }
 
+    public Read<K, V> withTopicRegex(Pattern topicRegex) {
+      return toBuilder().setTopicRegex(topicRegex).build();
+    }
+
     /** Returns a {@link PTransform} for PCollection of {@link KV}, dropping Kafka metatdata. */
     public PTransform<PBegin, PCollection<KV<K, V>>> withoutMetadata() {
       return new TypedWithoutMetadata<>(this);
@@ -1414,7 +1423,8 @@ public class KafkaIO {
                 .withValueDeserializerProvider(kafkaRead.getValueDeserializerProvider())
                 .withManualWatermarkEstimator()
                 .withTimestampPolicyFactory(kafkaRead.getTimestampPolicyFactory())
-                .withCheckStopReadingFn(kafkaRead.getCheckStopReadingFn());
+                .withCheckStopReadingFn(kafkaRead.getCheckStopReadingFn())
+                .withTopicRegex(kafkaRead.getTopicRegex());
         if (kafkaRead.isCommitOffsetsInFinalizeEnabled()) {
           readTransform = readTransform.commitOffsets();
         }
@@ -1429,6 +1439,7 @@ public class KafkaIO {
               topics.add(topicPartition.topic());
             }
           }
+
           output =
               input
                   .getPipeline()
@@ -1447,7 +1458,8 @@ public class KafkaIO {
                               kafkaRead.getConsumerConfig(),
                               kafkaRead.getStartReadTime(),
                               kafkaRead.getStopReadTime(),
-                              topics.stream().collect(Collectors.toList()))));
+                              topics,
+                              kafkaRead.getTopicRegex())));
 
         } else {
           output =
@@ -1814,6 +1826,8 @@ public class KafkaIO {
 
     abstract @Nullable TimestampPolicyFactory<K, V> getTimestampPolicyFactory();
 
+    abstract @Nullable Pattern getTopicRegex();
+
     abstract ReadSourceDescriptors.Builder<K, V> toBuilder();
 
     @AutoValue.Builder
@@ -1850,6 +1864,8 @@ public class KafkaIO {
 
       abstract ReadSourceDescriptors.Builder<K, V> setTimestampPolicyFactory(
           TimestampPolicyFactory<K, V> policy);
+
+      abstract ReadSourceDescriptors.Builder<K, V> setTopicRegex(Pattern topicRegex);
 
       abstract ReadSourceDescriptors<K, V> build();
     }
@@ -1949,6 +1965,16 @@ public class KafkaIO {
     public ReadSourceDescriptors<K, V> withCheckStopReadingFn(
         SerializableFunction<TopicPartition, Boolean> checkStopReadingFn) {
       return toBuilder().setCheckStopReadingFn(checkStopReadingFn).build();
+    }
+
+    /**
+     * Set topic regex to filter out list of topics matching in kafka cluster.
+     *
+     * @param topicRegex
+     * @return
+     */
+    public ReadSourceDescriptors<K, V> withTopicRegex(Pattern topicRegex) {
+      return toBuilder().setTopicRegex(topicRegex).build();
     }
 
     /**

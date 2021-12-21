@@ -21,6 +21,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 import org.apache.beam.sdk.annotations.Experimental;
 import org.apache.beam.sdk.metrics.Counter;
 import org.apache.beam.sdk.metrics.Metrics;
@@ -70,7 +71,9 @@ class WatchKafkaTopicPartitionDoFn extends DoFn<KV<byte[], byte[]>, KafkaSourceD
 
   private static final String COUNTER_NAMESPACE = "watch_kafka_topic_partition";
 
-  private final List<String> topics;
+  private final Set<String> topics;
+
+  private final Pattern topicRegex;
 
   WatchKafkaTopicPartitionDoFn(
       Duration checkDuration,
@@ -79,7 +82,8 @@ class WatchKafkaTopicPartitionDoFn extends DoFn<KV<byte[], byte[]>, KafkaSourceD
       Map<String, Object> kafkaConsumerConfig,
       Instant startReadTime,
       Instant stopReadTime,
-      List<String> topics) {
+      Set<String> topics,
+      Pattern topicRegex) {
     this.checkDuration = checkDuration == null ? DEFAULT_CHECK_DURATION : checkDuration;
     this.kafkaConsumerFactoryFn = kafkaConsumerFactoryFn;
     this.checkStopReadingFn = checkStopReadingFn;
@@ -87,6 +91,7 @@ class WatchKafkaTopicPartitionDoFn extends DoFn<KV<byte[], byte[]>, KafkaSourceD
     this.startReadTime = startReadTime;
     this.stopReadTime = stopReadTime;
     this.topics = topics;
+    this.topicRegex = topicRegex;
   }
 
   @TimerId(TIMER_ID)
@@ -112,7 +117,9 @@ class WatchKafkaTopicPartitionDoFn extends DoFn<KV<byte[], byte[]>, KafkaSourceD
         for (Map.Entry<String, List<PartitionInfo>> topicInfo :
             kafkaConsumer.listTopics().entrySet()) {
           for (PartitionInfo partition : topicInfo.getValue()) {
-            current.add(new TopicPartition(topicInfo.getKey(), partition.partition()));
+            if (topicRegex == null || topicRegex.matcher(partition.topic()).matches()) {
+              current.add(new TopicPartition(topicInfo.getKey(), partition.partition()));
+            }
           }
         }
       }
